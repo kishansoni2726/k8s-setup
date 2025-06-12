@@ -1,18 +1,26 @@
 #!/bin/bash
 
 # =========================================================================
-# COMPLETE KUBERNETES CLUSTER SETUP SCRIPT
+# KUBERNETES COMMON SETUP SCRIPT
 # =========================================================================
-# This script performs a complete Kubernetes cluster setup including:
-# - System prerequisites and kernel modules
-# - Docker installation and configuration
-# - Kubernetes tools installation
-# - Cluster initialization
+# This script contains all the common setup steps required for both
+# master and worker nodes in a Kubernetes cluster.
+# Run this script on ALL nodes (master and worker) before proceeding
+# with node-specific configurations.
 # =========================================================================
+
+echo "========================================="
+echo "KUBERNETES COMMON SETUP"
+echo "========================================="
+echo "This script will prepare your system for Kubernetes installation"
+echo "Run this on ALL nodes (master and worker) in your cluster"
+echo ""
 
 # =========================================================================
 # PHASE 1: SYSTEM PREREQUISITES
 # =========================================================================
+
+echo "Phase 1: Configuring system prerequisites..."
 
 # ----------------------------------------
 # Disable Swap Memory
@@ -38,6 +46,9 @@ lsmod | grep br_netfilter
 echo "Loading br_netfilter module..."
 sudo modprobe br_netfilter
 
+# Make the module load automatically on boot
+echo "br_netfilter" | sudo tee /etc/modules-load.d/k8s.conf
+
 # ----------------------------------------
 # Configure Kernel Network Parameters
 # ----------------------------------------
@@ -49,6 +60,8 @@ cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-ip6tables = 1
 # Enable netfilter on bridges for IPv4 traffic  
 net.bridge.bridge-nf-call-iptables = 1
+# Enable IP forwarding
+net.ipv4.ip_forward = 1
 EOF
 
 # Apply the sysctl parameters immediately
@@ -57,6 +70,8 @@ sudo sysctl --system
 # =========================================================================
 # PHASE 2: CONTAINER RUNTIME SETUP (DOCKER)
 # =========================================================================
+
+echo "Phase 2: Installing and configuring Docker..."
 
 # ----------------------------------------
 # Install Docker
@@ -96,9 +111,16 @@ systemctl enable docker
 # Restart Docker with new configuration
 systemctl restart docker
 
+# Verify Docker is running
+echo "Verifying Docker installation..."
+docker --version
+systemctl is-active docker
+
 # =========================================================================
 # PHASE 3: KUBERNETES TOOLS INSTALLATION
 # =========================================================================
+
+echo "Phase 3: Installing Kubernetes tools..."
 
 # ----------------------------------------
 # Clean Up Old Kubernetes Repository
@@ -154,10 +176,54 @@ sudo apt-mark hold kubelet kubeadm kubectl
 # Enable kubelet service (it will fail until cluster is initialized - this is normal)
 sudo systemctl enable --now kubelet
 
+# =========================================================================
+# PHASE 4: FINAL VERIFICATION
+# =========================================================================
+
+echo "Phase 4: Verifying installation..."
+
 # ----------------------------------------
-# Pre-pull Kubernetes Images
+# Verify Installations
+# ----------------------------------------
+echo "Verifying component versions..."
+echo "Docker version:"
+docker --version
+
+echo "Kubernetes tools versions:"
+kubelet --version
+kubeadm version
+kubectl version --client
+
+echo "System status:"
+echo "- Docker service: $(systemctl is-active docker)"
+echo "- Kubelet service: $(systemctl is-active kubelet)"
+echo "- Swap status: $(if swapon --show | grep -q .; then echo "ENABLED (ERROR)"; else echo "DISABLED (OK)"; fi)"
+
+# ----------------------------------------
+# Pre-pull Kubernetes Images (Optional)
 # ----------------------------------------
 echo "Pre-pulling Kubernetes control plane images..."
+echo "This may take a few minutes depending on your internet connection..."
 # Download required container images in advance to speed up cluster initialization
 # This downloads images for etcd, API server, controller manager, scheduler, etc.
 kubeadm config images pull
+
+echo ""
+echo "========================================="
+echo "COMMON SETUP COMPLETE!"
+echo "========================================="
+echo "All nodes are now prepared for Kubernetes cluster setup."
+echo ""
+echo "Next steps:"
+echo "1. For MASTER node: Follow master node setup instructions"
+echo "2. For WORKER nodes: Follow worker node setup instructions"
+echo ""
+echo "Prerequisites verified:"
+echo "✓ Swap disabled"
+echo "✓ Docker installed and configured"
+echo "✓ Kubernetes tools installed"
+echo "✓ Network parameters configured"
+echo "✓ Required kernel modules loaded"
+echo "✓ Container images pre-pulled"
+echo ""
+echo "System is ready for cluster initialization!"
